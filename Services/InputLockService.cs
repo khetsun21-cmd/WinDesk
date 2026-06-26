@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using MarketTicker.Interop;
@@ -7,15 +8,21 @@ namespace MarketTicker.Services;
 
 public sealed class InputLockService : IDisposable
 {
+    private static readonly string[] BlockedWindows =
+        ["taskmgr", "cmd", "powershell", "pwsh", "regedit", "mmc", "msconfig"];
+
     private readonly NativeMethods.LowLevelKeyboardProc _keyboardProc;
     private readonly NativeMethods.LowLevelMouseProc _mouseProc;
     private readonly string _password;
     private readonly StringBuilder _typedBuffer = new(64);
+    private readonly object _hookLock = new();
     private IntPtr _keyboardHook;
     private IntPtr _mouseHook;
     private bool _isLocked;
     private bool _isSessionLocked;
     private MessageWindow? _msgWindow;
+    private CancellationTokenSource? _windowMonitorCts;
+    private CancellationTokenSource? _keepAliveCts;
 
     public bool IsLocked => _isLocked;
 
@@ -41,6 +48,8 @@ public sealed class InputLockService : IDisposable
         _isLocked = true;
         _typedBuffer.Clear();
         InstallHooks();
+        StartWindowMonitor();
+        StartKeepAlive();
         LockStateChanged?.Invoke(this, true);
     }
 
@@ -50,6 +59,8 @@ public sealed class InputLockService : IDisposable
         _isLocked = false;
         _typedBuffer.Clear();
         RemoveHooks();
+        StopWindowMonitor();
+        StopKeepAlive();
         LockStateChanged?.Invoke(this, false);
     }
 
@@ -59,35 +70,138 @@ public sealed class InputLockService : IDisposable
         {
             _isSessionLocked = true;
             RemoveHooks();
+            StopWindowMonitor();
+            StopKeepAlive();
         }
         else if (sessionEvent == NativeMethods.WTS_SESSION_UNLOCK)
         {
             _isSessionLocked = false;
-            if (_isLocked) InstallHooks();
+            if (_isLocked)
+            {
+                InstallHooks();
+                StartWindowMonitor();
+                StartKeepAlive();
+            }
         }
     }
 
+    // ---- Window monitor (WinClose, not process kill) ----
+    private void StartWindowMonitor()
+    {
+        _windowMonitorCts?.Cancel();
+        _windowMonitorCts?.Dispose();
+        _windowMonitorCts = new CancellationTokenSource();
+        var token = _windowMonitorCts.Token;
+        Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await Task.Delay(300, token);
+                CloseBlockedWindows();
+            }
+        }, token);
+    }
+
+    private void StopWindowMonitor()
+    {
+        _windowMonitorCts?.Cancel();
+        _windowMonitorCts?.Dispose();
+        _windowMonitorCts = null;
+    }
+
+    private static void CloseBlockedWindows()
+    {
+        foreach (var name in BlockedWindows)
+        {
+            try
+            {
+                foreach (var proc in Process.GetProcessesByName(name))
+                {
+                    // Try gentle close first, then forceful
+                    if (!proc.HasExited)
+                    {
+                        try { proc.CloseMainWindow(); } catch { }
+                        // Give it a moment, then kill if still alive
+                        proc.WaitForExit(200);
+                        if (!proc.HasExited)
+                            try { proc.Kill(); } catch { }
+                    }
+                    proc.Dispose();
+                }
+            }
+            catch { }
+        }
+    }
+
+    // ---- Hook keep-alive (critical for Bluetooth / wireless keyboards) ----
+    private void StartKeepAlive()
+    {
+        _keepAliveCts?.Cancel();
+        _keepAliveCts?.Dispose();
+        _keepAliveCts = new CancellationTokenSource();
+        var token = _keepAliveCts.Token;
+        var lastInput = DateTime.UtcNow;
+        Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await Task.Delay(2000, token);
+                // Only restart hooks if idle for > 5 seconds (avoid interfering with typing)
+                if (_isLocked && !_isSessionLocked &&
+                    _typedBuffer.Length == 0 &&
+                    (DateTime.UtcNow - lastInput).TotalSeconds > 5)
+                {
+                    lock (_hookLock)
+                    {
+                        RemoveHooksInternal();
+                        Thread.Sleep(50);
+                        InstallHooksInternal();
+                    }
+                }
+            }
+        }, token);
+    }
+
+    private void StopKeepAlive()
+    {
+        _keepAliveCts?.Cancel();
+        _keepAliveCts?.Dispose();
+        _keepAliveCts = null;
+    }
+
+    // ---- Hook management ----
     private void InstallHooks()
+    {
+        lock (_hookLock) { InstallHooksInternal(); }
+    }
+
+    private void InstallHooksInternal()
     {
         try
         {
             var hMod = NativeMethods.GetModuleHandle(null);
             if (_keyboardHook == IntPtr.Zero)
-                _keyboardHook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _keyboardProc, hMod, 0);
+                _keyboardHook = NativeMethods.SetWindowsHookEx(
+                    NativeMethods.WH_KEYBOARD_LL, _keyboardProc, hMod, 0);
             if (_mouseHook == IntPtr.Zero)
-                _mouseHook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _mouseProc, hMod, 0);
+                _mouseHook = NativeMethods.SetWindowsHookEx(
+                    NativeMethods.WH_MOUSE_LL, _mouseProc, hMod, 0);
         }
-        catch { /* admin rights may be required */ }
+        catch { }
     }
 
     private void RemoveHooks()
+    {
+        lock (_hookLock) { RemoveHooksInternal(); }
+    }
+
+    private void RemoveHooksInternal()
     {
         if (_keyboardHook != IntPtr.Zero)
         {
             NativeMethods.UnhookWindowsHookEx(_keyboardHook);
             _keyboardHook = IntPtr.Zero;
         }
-
         if (_mouseHook != IntPtr.Zero)
         {
             NativeMethods.UnhookWindowsHookEx(_mouseHook);
@@ -95,6 +209,7 @@ public sealed class InputLockService : IDisposable
         }
     }
 
+    // ---- Hook callbacks ----
     private IntPtr KeyboardHookProc(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode < 0)
@@ -103,7 +218,6 @@ public sealed class InputLockService : IDisposable
         if (_isSessionLocked || !_isLocked)
             return NativeMethods.CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
 
-        // On key-down, accumulate characters and check password
         if (wParam == (IntPtr)NativeMethods.WM_KEYDOWN || wParam == (IntPtr)NativeMethods.WM_SYSKEYDOWN)
         {
             var vkCode = (uint)Marshal.ReadInt32(lParam);
@@ -111,7 +225,6 @@ public sealed class InputLockService : IDisposable
             if (ch.HasValue)
             {
                 _typedBuffer.Append(ch.Value);
-                // keep buffer bounded to 3x password length
                 var maxLen = Math.Max(_password.Length * 3, 8);
                 if (_typedBuffer.Length > maxLen)
                     _typedBuffer.Remove(0, _typedBuffer.Length - maxLen);
@@ -124,7 +237,6 @@ public sealed class InputLockService : IDisposable
             }
         }
 
-        // suppress all keyboard input when locked
         return (IntPtr)1;
     }
 
@@ -136,7 +248,6 @@ public sealed class InputLockService : IDisposable
         if (_isSessionLocked || !_isLocked)
             return NativeMethods.CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
 
-        // suppress all mouse input when locked
         return (IntPtr)1;
     }
 
@@ -159,13 +270,12 @@ public sealed class InputLockService : IDisposable
     public void Dispose()
     {
         RemoveHooks();
+        StopWindowMonitor();
+        StopKeepAlive();
         _msgWindow?.Dispose();
         _msgWindow = null;
     }
 
-    // -------------------------------------------------------
-    // Hidden native window for WM_HOTKEY + WM_WTSSESSION_CHANGE
-    // -------------------------------------------------------
     private sealed class MessageWindow : Forms.NativeWindow, IDisposable
     {
         private readonly InputLockService _service;
