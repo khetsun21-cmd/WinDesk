@@ -6,6 +6,8 @@ namespace MarketTicker;
 
 public partial class App
 {
+    private const string PasswordEnvVar = "MARKETTICKER_LOCK_PASSWORD";
+
     private AppConfig _config = AppConfig.Default;
     private SettingsStore? _settingsStore;
     private QuoteService? _quoteService;
@@ -22,8 +24,10 @@ public partial class App
         _settingsStore = new SettingsStore();
         _config = _settingsStore.Load();
 
+        var password = Environment.GetEnvironmentVariable(PasswordEnvVar)
+                       ?? _config.LockPassword;
         _quoteService = new QuoteService(_config);
-        _lockService = new InputLockService(_config.LockPassword);
+        _lockService = new InputLockService(password ?? string.Empty);
         _mainWindow = new MainWindow(_config, _settingsStore, _quoteService);
         _trayIconController = new TrayIconController(_mainWindow, _config.Markets, _lockService);
 
