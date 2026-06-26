@@ -15,14 +15,12 @@ public sealed class InputLockService : IDisposable
     private readonly NativeMethods.LowLevelMouseProc _mouseProc;
     private readonly string _password;
     private readonly StringBuilder _typedBuffer = new(64);
-    private readonly object _hookLock = new();
     private IntPtr _keyboardHook;
     private IntPtr _mouseHook;
     private bool _isLocked;
     private bool _isSessionLocked;
     private MessageWindow? _msgWindow;
     private CancellationTokenSource? _windowMonitorCts;
-    private CancellationTokenSource? _keepAliveCts;
 
     public bool IsLocked => _isLocked;
 
@@ -49,7 +47,6 @@ public sealed class InputLockService : IDisposable
         _typedBuffer.Clear();
         InstallHooks();
         StartWindowMonitor();
-        StartKeepAlive();
         LockStateChanged?.Invoke(this, true);
     }
 
@@ -60,7 +57,6 @@ public sealed class InputLockService : IDisposable
         _typedBuffer.Clear();
         RemoveHooks();
         StopWindowMonitor();
-        StopKeepAlive();
         LockStateChanged?.Invoke(this, false);
     }
 
@@ -71,7 +67,6 @@ public sealed class InputLockService : IDisposable
             _isSessionLocked = true;
             RemoveHooks();
             StopWindowMonitor();
-            StopKeepAlive();
         }
         else if (sessionEvent == NativeMethods.WTS_SESSION_UNLOCK)
         {
@@ -80,7 +75,6 @@ public sealed class InputLockService : IDisposable
             {
                 InstallHooks();
                 StartWindowMonitor();
-                StartKeepAlive();
             }
         }
     }
@@ -117,11 +111,9 @@ public sealed class InputLockService : IDisposable
             {
                 foreach (var proc in Process.GetProcessesByName(name))
                 {
-                    // Try gentle close first, then forceful
                     if (!proc.HasExited)
                     {
                         try { proc.CloseMainWindow(); } catch { }
-                        // Give it a moment, then kill if still alive
                         proc.WaitForExit(200);
                         if (!proc.HasExited)
                             try { proc.Kill(); } catch { }
@@ -133,49 +125,8 @@ public sealed class InputLockService : IDisposable
         }
     }
 
-    // ---- Hook keep-alive (critical for Bluetooth / wireless keyboards) ----
-    private void StartKeepAlive()
-    {
-        _keepAliveCts?.Cancel();
-        _keepAliveCts?.Dispose();
-        _keepAliveCts = new CancellationTokenSource();
-        var token = _keepAliveCts.Token;
-        var lastInput = DateTime.UtcNow;
-        Task.Run(async () =>
-        {
-            while (!token.IsCancellationRequested)
-            {
-                await Task.Delay(2000, token);
-                // Only restart hooks if idle for > 5 seconds (avoid interfering with typing)
-                if (_isLocked && !_isSessionLocked &&
-                    _typedBuffer.Length == 0 &&
-                    (DateTime.UtcNow - lastInput).TotalSeconds > 5)
-                {
-                    lock (_hookLock)
-                    {
-                        RemoveHooksInternal();
-                        Thread.Sleep(50);
-                        InstallHooksInternal();
-                    }
-                }
-            }
-        }, token);
-    }
-
-    private void StopKeepAlive()
-    {
-        _keepAliveCts?.Cancel();
-        _keepAliveCts?.Dispose();
-        _keepAliveCts = null;
-    }
-
     // ---- Hook management ----
     private void InstallHooks()
-    {
-        lock (_hookLock) { InstallHooksInternal(); }
-    }
-
-    private void InstallHooksInternal()
     {
         try
         {
@@ -191,11 +142,6 @@ public sealed class InputLockService : IDisposable
     }
 
     private void RemoveHooks()
-    {
-        lock (_hookLock) { RemoveHooksInternal(); }
-    }
-
-    private void RemoveHooksInternal()
     {
         if (_keyboardHook != IntPtr.Zero)
         {
@@ -271,7 +217,6 @@ public sealed class InputLockService : IDisposable
     {
         RemoveHooks();
         StopWindowMonitor();
-        StopKeepAlive();
         _msgWindow?.Dispose();
         _msgWindow = null;
     }
