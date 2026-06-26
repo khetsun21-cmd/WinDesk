@@ -80,7 +80,18 @@ public sealed class TrayIconController : IDisposable
         _lockItem.Text = locked ? "已锁定 (Ctrl+; 解锁)" : "锁定 Ctrl+;";
         _lockItem.Checked = locked;
         _lockMenuUpdating = false;
-        UpdateText(locked ? "🔒 LOCKED" : _notifyIcon.Text.Replace("🔒 LOCKED", "").Trim());
+        // Trigger a refresh to add/remove the 🔒 prefix
+        RefreshTrayText();
+    }
+
+    private void RefreshTrayText()
+    {
+        // Get the current raw text without the lock prefix, then re-apply
+        var raw = _notifyIcon.Text;
+        if (raw.StartsWith("🔒 ")) raw = raw[3..];
+        else if (raw.StartsWith("🔒")) raw = raw[2..];
+        if (raw == "LOCKED") raw = "";
+        UpdateText(raw);
     }
 
     private void NotifyIcon_DoubleClick(object? sender, EventArgs e)
