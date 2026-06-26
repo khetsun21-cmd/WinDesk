@@ -2,7 +2,10 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
+using MarketTicker.Interop;
 using MarketTicker.Models;
 using MarketTicker.Services;
 
@@ -13,11 +16,13 @@ public partial class MainWindow
     private readonly AppConfig _config;
     private readonly SettingsStore _settingsStore;
     private readonly QuoteService _quoteService;
-    private readonly PeriodicTimer _timer;
+    private readonly PeriodicTimer _refreshTimer;
+    private readonly DispatcherTimer _topmostTimer;
     private readonly CancellationTokenSource _shutdown = new();
     private CancellationTokenSource? _refreshCts;
     private MarketDefinition _currentMarket;
     private bool _allowClose;
+    private IntPtr _handle;
 
     public event EventHandler<MarketDefinition>? MarketChanged;
     public event EventHandler<string>? PriceChanged;
@@ -29,7 +34,13 @@ public partial class MainWindow
         _config = config;
         _settingsStore = settingsStore;
         _quoteService = quoteService;
-        _timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(500, _config.RefreshIntervalMs)));
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(500, _config.RefreshIntervalMs)));
+        _topmostTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2),
+            IsEnabled = false
+        };
+        _topmostTimer.Tick += TopmostTimer_Tick;
         _currentMarket = _config.GetCurrentMarket();
 
         Left = _config.Window.Left;
@@ -46,12 +57,14 @@ public partial class MainWindow
         Show();
         WindowState = WindowState.Normal;
         Topmost = _config.Window.Topmost;
+        ForceTopmost();
         Activate();
     }
 
     public void ExitApplication()
     {
         _allowClose = true;
+        _topmostTimer.Stop();
         Close();
         System.Windows.Application.Current.Shutdown();
     }
@@ -64,8 +77,16 @@ public partial class MainWindow
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        _handle = new WindowInteropHelper(this).Handle;
+        ForceTopmost();
+        _topmostTimer.Start();
         await RefreshOnceAsync();
         _ = RunRefreshLoopAsync(_shutdown.Token);
+    }
+
+    private void Window_Deactivated(object? sender, EventArgs e)
+    {
+        ForceTopmost();
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)
@@ -80,9 +101,10 @@ public partial class MainWindow
         }
 
         _shutdown.Cancel();
-        _timer.Dispose();
+        _refreshTimer.Dispose();
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
+        _topmostTimer.Stop();
     }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -92,6 +114,25 @@ public partial class MainWindow
             DragMove();
             SaveWindowPosition();
         }
+    }
+
+    private void TopmostTimer_Tick(object? sender, EventArgs e)
+    {
+        ForceTopmost();
+    }
+
+    private void ForceTopmost()
+    {
+        if (_handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        NativeMethods.SetWindowPos(
+            _handle,
+            NativeMethods.HWND_TOPMOST,
+            0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
     }
 
     private void BuildContextMenu()
@@ -130,7 +171,7 @@ public partial class MainWindow
         _config.CurrentSymbol = market.Symbol;
 
         PriceText.Text = "--";
-        RootBorder.BorderBrush = new SolidColorBrush(market.ToBrushColor());
+        PriceText.Foreground = new SolidColorBrush(market.ToBrushColor());
         UpdateCheckedMarket();
         UpdateToolTip("--");
 
@@ -159,7 +200,7 @@ public partial class MainWindow
     {
         try
         {
-            while (await _timer.WaitForNextTickAsync(cancellationToken))
+            while (await _refreshTimer.WaitForNextTickAsync(cancellationToken))
             {
                 await RefreshOnceAsync();
             }
