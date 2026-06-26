@@ -37,7 +37,7 @@ public sealed class InputLockService : IDisposable
 
     public void Lock()
     {
-        if (_isLocked || _isSessionLocked) return;
+        if (_isLocked || _isSessionLocked || string.IsNullOrEmpty(_password)) return;
         _isLocked = true;
         _typedBuffer.Clear();
         InstallHooks();
