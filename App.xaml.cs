@@ -9,6 +9,7 @@ public partial class App
     private AppConfig _config = AppConfig.Default;
     private SettingsStore? _settingsStore;
     private QuoteService? _quoteService;
+    private InputLockService? _lockService;
     private TrayIconController? _trayIconController;
     private MainWindow? _mainWindow;
 
@@ -22,14 +23,16 @@ public partial class App
         _config = _settingsStore.Load();
 
         _quoteService = new QuoteService(_config);
+        _lockService = new InputLockService(_config.LockPassword);
         _mainWindow = new MainWindow(_config, _settingsStore, _quoteService);
-        _trayIconController = new TrayIconController(_mainWindow, _config.Markets);
+        _trayIconController = new TrayIconController(_mainWindow, _config.Markets, _lockService);
 
         _mainWindow.Show();
     }
 
     protected override void OnExit(System.Windows.ExitEventArgs e)
     {
+        _lockService?.Dispose();
         _trayIconController?.Dispose();
         _quoteService?.Dispose();
         base.OnExit(e);

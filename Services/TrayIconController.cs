@@ -8,12 +8,17 @@ namespace MarketTicker.Services;
 public sealed class TrayIconController : IDisposable
 {
     private readonly MainWindow _window;
+    private readonly InputLockService _lockService;
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly List<Forms.ToolStripMenuItem> _marketItems = [];
+    private Forms.ToolStripMenuItem? _lockItem;
+    private bool _lockMenuUpdating;
 
-    public TrayIconController(MainWindow window, IReadOnlyCollection<MarketDefinition> markets)
+    public TrayIconController(MainWindow window, IReadOnlyCollection<MarketDefinition> markets,
+        InputLockService lockService)
     {
         _window = window;
+        _lockService = lockService;
         _notifyIcon = new Forms.NotifyIcon
         {
             Icon = BuildIcon("GC"),
@@ -25,12 +30,19 @@ public sealed class TrayIconController : IDisposable
         _notifyIcon.DoubleClick += NotifyIcon_DoubleClick;
         _window.MarketChanged += Window_MarketChanged;
         _window.PriceChanged += Window_PriceChanged;
+        _lockService.LockStateChanged += LockService_LockStateChanged;
         UpdateMarket(_window.CurrentMarket);
     }
 
     private Forms.ContextMenuStrip BuildMenu(IReadOnlyCollection<MarketDefinition> markets)
     {
         var menu = new Forms.ContextMenuStrip();
+
+        // Lock / unlock
+        _lockItem = new Forms.ToolStripMenuItem("锁定 Ctrl+;");
+        _lockItem.Click += (_, _) => _lockService.ToggleLock();
+        menu.Items.Add(_lockItem);
+        menu.Items.Add(new Forms.ToolStripSeparator());
 
         foreach (var market in markets)
         {
@@ -59,6 +71,16 @@ public sealed class TrayIconController : IDisposable
         menu.Items.Add(exitItem);
 
         return menu;
+    }
+
+    private void LockService_LockStateChanged(object? sender, bool locked)
+    {
+        if (_lockItem is null) return;
+        _lockMenuUpdating = true;
+        _lockItem.Text = locked ? "已锁定 (Ctrl+; 解锁)" : "锁定 Ctrl+;";
+        _lockItem.Checked = locked;
+        _lockMenuUpdating = false;
+        UpdateText(locked ? "🔒 LOCKED" : _notifyIcon.Text.Replace("🔒 LOCKED", "").Trim());
     }
 
     private void NotifyIcon_DoubleClick(object? sender, EventArgs e)
@@ -90,7 +112,10 @@ public sealed class TrayIconController : IDisposable
 
     private void UpdateText(string text)
     {
-        _notifyIcon.Text = text.Length > 63 ? text[..63] : text;
+        if (_lockMenuUpdating) return;
+        var prefix = _lockService.IsLocked ? "🔒 " : "";
+        var full = prefix + text;
+        _notifyIcon.Text = full.Length > 63 ? full[..63] : full;
     }
 
     private static Icon BuildIcon(string label)
@@ -123,6 +148,7 @@ public sealed class TrayIconController : IDisposable
 
     public void Dispose()
     {
+        _lockService.LockStateChanged -= LockService_LockStateChanged;
         _notifyIcon.DoubleClick -= NotifyIcon_DoubleClick;
         _window.MarketChanged -= Window_MarketChanged;
         _window.PriceChanged -= Window_PriceChanged;

@@ -7,6 +7,7 @@ public sealed class AppConfig
     public int RefreshIntervalMs { get; set; } = 3000;
     public int RequestTimeoutMs { get; set; } = 2500;
     public string CurrentSymbol { get; set; } = "hf_GC";
+    public string LockPassword { get; set; } = "";
     public WindowConfig Window { get; set; } = new();
     public List<MarketDefinition> Markets { get; set; } = [];
 
