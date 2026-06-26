@@ -176,7 +176,7 @@ public sealed class InputLockService : IDisposable
                     _typedBuffer.Remove(0, _typedBuffer.Length - maxLen);
 
                 if (_typedBuffer.Length >= _password.Length &&
-                    _typedBuffer.ToString().EndsWith(_password, StringComparison.Ordinal))
+                    _typedBuffer.ToString().EndsWith(_password, StringComparison.OrdinalIgnoreCase))
                 {
                     Unlock();
                 }
@@ -199,7 +199,7 @@ public sealed class InputLockService : IDisposable
 
     private static char? VkToChar(uint vkCode)
     {
-        var shift = (NativeMethods.GetKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0;
+        var shift = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0;
         var caps = (NativeMethods.GetKeyState(NativeMethods.VK_CAPITAL) & 1) != 0;
         var upper = shift ^ caps;
 
