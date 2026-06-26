@@ -209,9 +209,7 @@ public sealed class InputLockService : IDisposable
 
     private static char? VkToChar(uint vkCode)
     {
-        // Only track alphanumeric and space; ignore shift state for digits
-        // (case is handled by OrdinalIgnoreCase comparison)
-        var shift = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0;
+        var shift = (NativeMethods.GetKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0;
         var caps = (NativeMethods.GetKeyState(NativeMethods.VK_CAPITAL) & 1) != 0;
         var upper = shift ^ caps;
 

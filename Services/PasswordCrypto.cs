@@ -19,20 +19,51 @@ internal static class PasswordCrypto
         return Convert.ToBase64String(bytes);
     }
 
-    /// <summary>Decode obfuscated password back to plaintext.</summary>
+    /// <summary>Decode obfuscated password back to plaintext.
+    /// Handles three formats for backwards compatibility:
+    /// 1. XOR+Base64 (current)
+    /// 2. Plain Base64 (intermediate)
+    /// 3. Plaintext (earliest)
+    /// </summary>
     public static string Decode(string encoded)
     {
         if (string.IsNullOrEmpty(encoded)) return string.Empty;
+
+        // Try XOR+Base64 (current format)
         try
         {
             var bytes = Convert.FromBase64String(encoded);
             for (var i = 0; i < bytes.Length; i++)
                 bytes[i] ^= XorKey[i % XorKey.Length];
-            return Encoding.UTF8.GetString(bytes);
+            var result = Encoding.UTF8.GetString(bytes);
+            if (IsReasonablePassword(result))
+                return result;
         }
-        catch
+        catch { }
+
+        // Try plain Base64 (intermediate format)
+        try
         {
-            return string.Empty;
+            var bytes = Convert.FromBase64String(encoded);
+            var result = Encoding.UTF8.GetString(bytes);
+            if (IsReasonablePassword(result))
+                return result;
         }
+        catch { }
+
+        // Fallback: plaintext (earliest format)
+        return encoded;
+    }
+
+    /// <summary>Check if a decoded string looks like a reasonable password
+    /// (printable ASCII, no control characters or garbage bytes).</summary>
+    private static bool IsReasonablePassword(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        foreach (var c in text)
+        {
+            if (c < 0x20 || c > 0x7E) return false;
+        }
+        return true;
     }
 }

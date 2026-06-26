@@ -30,6 +30,15 @@ public sealed class SettingsStore
     {
         var config = TryLoad(_userPath) ?? TryLoad(_defaultPath) ?? AppConfig.Default;
 
+        // Migrate old password formats (plaintext / plain Base64) to XOR+Base64
+        var plaintext = PasswordCrypto.Decode(config.LockPassword);
+        var canonical = PasswordCrypto.Encode(plaintext);
+        if (!string.Equals(canonical, config.LockPassword, StringComparison.Ordinal))
+        {
+            config.LockPassword = canonical;
+            Save(config);
+        }
+
         if (config.Markets.Count == 0)
         {
             config.Markets = AppConfig.Default.Markets;

@@ -54,9 +54,6 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern short GetKeyState(int nVirtKey);
 
-    [DllImport("user32.dll")]
-    internal static extern short GetAsyncKeyState(int vKey);
-
     internal const int VK_SHIFT = 0x10;
     internal const int VK_CAPITAL = 0x14;
 
