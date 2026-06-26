@@ -61,6 +61,7 @@ public sealed class InputLockService : IDisposable
         _isLocked = false;
         _typedBuffer.Clear();
         RemoveHooks();
+        ReleaseStuckModifiers();
         StopWindowMonitor();
         LockStateChanged?.Invoke(this, false);
     }
@@ -157,6 +158,22 @@ public sealed class InputLockService : IDisposable
         {
             NativeMethods.UnhookWindowsHookEx(_mouseHook);
             _mouseHook = IntPtr.Zero;
+        }
+    }
+
+    /// <summary>
+    /// When locking via Ctrl+; hotkey, the key-up events for Ctrl and ;
+    /// are eaten by our hook before the system sees them. Windows then
+    /// believes modifiers are still held. Synthesize key-up for all
+    /// standard modifiers to clear the stuck state.
+    /// </summary>
+    private static void ReleaseStuckModifiers()
+    {
+        byte[] modifiers = [NativeMethods.VK_SHIFT, NativeMethods.VK_CONTROL,
+                            NativeMethods.VK_MENU, NativeMethods.VK_LWIN, NativeMethods.VK_RWIN];
+        foreach (var vk in modifiers)
+        {
+            NativeMethods.keybd_event(vk, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
     }
 
