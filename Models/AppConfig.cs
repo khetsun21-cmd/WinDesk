@@ -1,6 +1,6 @@
 using System.Windows.Media;
 
-namespace MarketTicker.Models;
+namespace WinDesk.Models;
 
 public sealed class AppConfig
 {

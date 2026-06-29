@@ -1,6 +1,6 @@
-using MarketTicker.Models;
+using WinDesk.Models;
 
-namespace MarketTicker.Services;
+namespace WinDesk.Services;
 
 public interface IQuoteClient
 {

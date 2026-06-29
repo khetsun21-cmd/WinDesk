@@ -1,4 +1,4 @@
-# MarketTicker
+# WinDesk
 
 A small Windows .NET 8 WPF floating quote widget.
 
@@ -11,25 +11,25 @@ A small Windows .NET 8 WPF floating quote widget.
 - Sina HTTP quote parsing for index, domestic futures, and global futures symbols
 - OKX ticker JSON support for `data[0].last`
 - Simple WebSocket JSON source support via `url`, `subscribeMessage`, and `jsonPricePath`
-- Default settings from `appsettings.json`; runtime changes are saved to `%AppData%\\MarketTicker\\appsettings.json`
+- Default settings from `appsettings.json`; runtime changes are saved to `%AppData%\\WinDesk\\appsettings.json`
 
 ## Run
 
 ```powershell
-dotnet run --project .\MarketTicker.csproj
+dotnet run --project .\WinDesk.csproj
 ```
 
 ## Publish single exe
 
 ```powershell
-dotnet publish .\MarketTicker.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
+dotnet publish .\WinDesk.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
 ```
 
 Use `--self-contained true` if the target machine does not have the .NET 8 Desktop Runtime installed.
 
 ## Configure symbols
 
-Edit `appsettings.json` before first run, or edit `%AppData%\\MarketTicker\\appsettings.json` after the app has saved runtime settings.
+Edit `appsettings.json` before first run, or edit `%AppData%\\WinDesk\\appsettings.json` after the app has saved runtime settings.
 
 Sina parser defaults:
 

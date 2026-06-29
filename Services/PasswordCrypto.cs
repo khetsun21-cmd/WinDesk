@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace MarketTicker.Services;
+namespace WinDesk.Services;
 
 internal static class PasswordCrypto
 {

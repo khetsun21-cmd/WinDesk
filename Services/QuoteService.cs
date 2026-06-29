@@ -6,9 +6,9 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using MarketTicker.Models;
+using WinDesk.Models;
 
-namespace MarketTicker.Services;
+namespace WinDesk.Services;
 
 public sealed partial class QuoteService : IQuoteClient, IDisposable
 {
@@ -22,7 +22,7 @@ public sealed partial class QuoteService : IQuoteClient, IDisposable
         {
             Timeout = TimeSpan.FromMilliseconds(Math.Max(500, config.RequestTimeoutMs))
         };
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) MarketTicker/1.0");
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) WinDesk/1.0");
         _httpClient.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true };
     }
 

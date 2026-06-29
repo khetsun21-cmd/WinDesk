@@ -1,9 +1,9 @@
 using System.Drawing;
-using MarketTicker.Interop;
-using MarketTicker.Models;
+using WinDesk.Interop;
+using WinDesk.Models;
 using Forms = System.Windows.Forms;
 
-namespace MarketTicker.Services;
+namespace WinDesk.Services;
 
 public sealed class TrayIconController : IDisposable
 {
@@ -22,7 +22,7 @@ public sealed class TrayIconController : IDisposable
         _notifyIcon = new Forms.NotifyIcon
         {
             Icon = BuildIcon("GC"),
-            Text = "MarketTicker",
+            Text = "WinDesk",
             Visible = true,
             ContextMenuStrip = BuildMenu(markets)
         };

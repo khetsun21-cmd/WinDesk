@@ -5,11 +5,11 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
-using MarketTicker.Interop;
-using MarketTicker.Models;
-using MarketTicker.Services;
+using WinDesk.Interop;
+using WinDesk.Models;
+using WinDesk.Services;
 
-namespace MarketTicker;
+namespace WinDesk;
 
 public partial class MainWindow
 {
@@ -78,6 +78,7 @@ public partial class MainWindow
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         _handle = new WindowInteropHelper(this).Handle;
+        HideFromAltTab();
         ForceTopmost();
         _topmostTimer.Start();
         await RefreshOnceAsync();
@@ -119,6 +120,18 @@ public partial class MainWindow
     private void TopmostTimer_Tick(object? sender, EventArgs e)
     {
         ForceTopmost();
+    }
+
+    private void HideFromAltTab()
+    {
+        if (_handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var ex = NativeMethods.GetWindowLongPtr(_handle, -20);
+        var newEx = new IntPtr(ex.ToInt64() | (long)NativeMethods.WS_EX_TOOLWINDOW);
+        NativeMethods.SetWindowLongPtr(_handle, -20, newEx);
     }
 
     private void ForceTopmost()

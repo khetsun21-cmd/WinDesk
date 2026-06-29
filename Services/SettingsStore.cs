@@ -1,9 +1,9 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using MarketTicker.Models;
+using WinDesk.Models;
 
-namespace MarketTicker.Services;
+namespace WinDesk.Services;
 
 public sealed class SettingsStore
 {
@@ -22,7 +22,7 @@ public sealed class SettingsStore
         _defaultPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         _userPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "MarketTicker",
+            "WinDesk",
             "appsettings.json");
     }
 

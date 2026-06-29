@@ -2,10 +2,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using MarketTicker.Interop;
+using WinDesk.Interop;
 using Forms = System.Windows.Forms;
 
-namespace MarketTicker.Services;
+namespace WinDesk.Services;
 
 public sealed class InputLockService : IDisposable
 {
@@ -14,7 +14,7 @@ public sealed class InputLockService : IDisposable
 
     private static readonly string LogPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "MarketTicker", "lock.log");
+        "WinDesk", "lock.log");
 
     private readonly NativeMethods.LowLevelKeyboardProc _keyboardProc;
     private readonly NativeMethods.LowLevelMouseProc _mouseProc;

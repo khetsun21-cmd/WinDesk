@@ -1,8 +1,8 @@
-using MarketTicker.Models;
-using MarketTicker.Services;
+using WinDesk.Models;
+using WinDesk.Services;
 using Forms = System.Windows.Forms;
 
-namespace MarketTicker;
+namespace WinDesk;
 
 public partial class App
 {
