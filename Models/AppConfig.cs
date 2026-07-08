@@ -39,6 +39,17 @@ public sealed class AppConfig
             },
             new MarketDefinition
             {
+                Name = "纳斯达克100期货",
+                DisplayCode = "NQ",
+                Symbol = "hf_NQ",
+                UseRn = true,
+                Referer = "https://finance.sina.com.cn/",
+                Source = QuoteSource.Sina,
+                Parser = QuoteParser.Global,
+                Color = "7FB3FF"
+            },
+            new MarketDefinition
+            {
                 Name = "中证1000",
                 DisplayCode = "ZZ1000",
                 Symbol = "s_sh000852",

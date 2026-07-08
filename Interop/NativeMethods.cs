@@ -14,6 +14,11 @@ internal static class NativeMethods
     internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
         int x, int y, int cx, int cy, uint uFlags);
 
+    // -- Screen capture exclusion --
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+
     // -- Extended window styles (hide from Alt+Tab / taskbar) --
     private const int GWL_EXSTYLE = -20;
     internal const uint WS_EX_TOOLWINDOW = 0x00000080;
