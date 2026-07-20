@@ -79,6 +79,28 @@ public sealed class AppConfig
                 Source = QuoteSource.Sina,
                 Parser = QuoteParser.Futures,
                 Color = "CCCCCC"
+            },
+            new MarketDefinition
+            {
+                Name = "合成橡胶2609",
+                DisplayCode = "BR2609",
+                Symbol = "nf_BR2609",
+                UseRn = true,
+                Referer = "https://vip.stock.finance.sina.com.cn/",
+                Source = QuoteSource.Sina,
+                Parser = QuoteParser.Futures,
+                Color = "CCCCCC"
+            },
+            new MarketDefinition
+            {
+                Name = "中千主连",
+                DisplayCode = "IM0",
+                Symbol = "nf_IM0",
+                UseRn = true,
+                Referer = "https://vip.stock.finance.sina.com.cn/",
+                Source = QuoteSource.Sina,
+                Parser = QuoteParser.Futures,
+                Color = "CCCCCC"
             }
         ]
     };

@@ -30,6 +30,7 @@
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
+    <PublishDir>$(ProjectDir)publish\</PublishDir>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
