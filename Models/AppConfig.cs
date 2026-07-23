@@ -102,6 +102,17 @@ public sealed class AppConfig
                 Parser = QuoteParser.Futures,
                 PriceFieldIndex = 3,
                 Color = "CCCCCC"
+            },
+            new MarketDefinition
+            {
+                Name = "LPG主连",
+                DisplayCode = "PG0",
+                Symbol = "nf_PG0",
+                UseRn = true,
+                Referer = "https://vip.stock.finance.sina.com.cn/",
+                Source = QuoteSource.Sina,
+                Parser = QuoteParser.Futures,
+                Color = "CCCCCC"
             }
         ]
     };

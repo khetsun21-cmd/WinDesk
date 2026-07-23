@@ -137,6 +137,7 @@ internal static class Program
     {
         AssertDefaultMarket("hf_NQ", "纳斯达克100期货", "NQ", QuoteParser.Global);
         AssertDefaultMarket("nf_BR2609", "合成橡胶2609", "BR2609", QuoteParser.Futures);
+        AssertDefaultMarket("nf_PG0", "LPG主连", "PG0", QuoteParser.Futures);
     }
 
     private static void DefaultIm0UsesCffexLatestPriceField()
