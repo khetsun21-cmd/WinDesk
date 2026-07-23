@@ -17,7 +17,6 @@ public partial class MainWindow
     private readonly AppConfig _config;
     private readonly SettingsStore _settingsStore;
     private readonly QuoteService _quoteService;
-    private readonly WindowCaptureProtector _captureProtector;
     private readonly WindowPlacementService _placementService;
     private readonly PeriodicTimer _refreshTimer;
     private readonly DispatcherTimer _topmostTimer;
@@ -26,24 +25,24 @@ public partial class MainWindow
     private MarketDefinition _currentMarket;
     private bool _allowClose;
     private IntPtr _handle;
+    private WindowWorkArea? _lastWorkArea;
 
     public event EventHandler<MarketDefinition>? MarketChanged;
     public event EventHandler<string>? PriceChanged;
 
     public MainWindow(AppConfig config, SettingsStore settingsStore, QuoteService quoteService)
-        : this(config, settingsStore, quoteService, new WindowCaptureProtector(), new WindowPlacementService())
+        : this(config, settingsStore, quoteService, new WindowPlacementService())
     {
     }
 
     internal MainWindow(AppConfig config, SettingsStore settingsStore, QuoteService quoteService,
-        WindowCaptureProtector captureProtector, WindowPlacementService placementService)
+        WindowPlacementService placementService)
     {
         InitializeComponent();
 
         _config = config;
         _settingsStore = settingsStore;
         _quoteService = quoteService;
-        _captureProtector = captureProtector;
         _placementService = placementService;
         _refreshTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(500, _config.RefreshIntervalMs)));
         _topmostTimer = new DispatcherTimer
@@ -62,6 +61,7 @@ public partial class MainWindow
         Left = initialPlacement.Left;
         Top = initialPlacement.Top;
         Topmost = _config.Window.Topmost;
+        RememberCurrentWorkArea();
         BuildContextMenu();
         ApplyMarket(_currentMarket, save: false);
     }
@@ -96,7 +96,6 @@ public partial class MainWindow
     {
         _handle = new WindowInteropHelper(this).Handle;
         HideFromAltTab();
-        _captureProtector.ApplyExcludeFromCapture(_handle);
         SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
         EnsureWindowOnScreen(save: true);
         ForceTopmost();
@@ -133,6 +132,7 @@ public partial class MainWindow
     {
         if (e.ButtonState == MouseButtonState.Pressed)
         {
+            EnsureWindowOnScreen(save: false);
             DragMove();
             EnsureWindowOnScreen(save: true);
         }
@@ -140,12 +140,11 @@ public partial class MainWindow
 
     private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
     {
-        Dispatcher.Invoke(() => EnsureWindowOnScreen(save: true));
+        Dispatcher.Invoke(() => MoveWindowProportionallyToScreen(save: true));
     }
 
     private void TopmostTimer_Tick(object? sender, EventArgs e)
     {
-        EnsureWindowOnScreen(save: true);
         ForceTopmost();
     }
 
@@ -292,16 +291,69 @@ public partial class MainWindow
             return;
         }
 
-        var width = ActualWidth > 0 ? ActualWidth : Width;
-        var height = ActualHeight > 0 ? ActualHeight : Height;
+        var (width, height) = GetWindowSize();
         var placement = _placementService.ClampToVisibleArea(Left, Top, width, height);
         Left = placement.Left;
         Top = placement.Top;
+        RememberCurrentWorkArea(width, height);
 
         if (save)
         {
             SaveWindowPosition();
         }
+    }
+
+    private void MoveWindowProportionallyToScreen(bool save)
+    {
+        if (!double.IsFinite(Left) || !double.IsFinite(Top))
+        {
+            return;
+        }
+
+        var (width, height) = GetWindowSize();
+        if (_lastWorkArea is { } previousArea)
+        {
+            var placement = _placementService.MoveProportionallyToVisibleArea(
+                Left,
+                Top,
+                width,
+                height,
+                previousArea);
+            Left = placement.Left;
+            Top = placement.Top;
+        }
+        else
+        {
+            var placement = _placementService.ClampToVisibleArea(Left, Top, width, height);
+            Left = placement.Left;
+            Top = placement.Top;
+        }
+
+        RememberCurrentWorkArea(width, height);
+
+        if (save)
+        {
+            SaveWindowPosition();
+        }
+    }
+
+    private (double Width, double Height) GetWindowSize()
+    {
+        var width = ActualWidth > 0 ? ActualWidth : Width;
+        var height = ActualHeight > 0 ? ActualHeight : Height;
+
+        return (width, height);
+    }
+
+    private void RememberCurrentWorkArea()
+    {
+        var (width, height) = GetWindowSize();
+        RememberCurrentWorkArea(width, height);
+    }
+
+    private void RememberCurrentWorkArea(double width, double height)
+    {
+        _lastWorkArea = _placementService.FindBestWorkArea(Left, Top, width, height);
     }
 
     private void SaveWindowPosition()

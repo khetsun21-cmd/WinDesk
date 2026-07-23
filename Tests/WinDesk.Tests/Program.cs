@@ -11,9 +11,16 @@ internal static class Program
             ("ApplyExcludeFromCapture ignores a zero handle", ApplyExcludeFromCaptureIgnoresZeroHandle),
             ("ClampToVisibleArea moves an offscreen window into a visible work area", ClampToVisibleAreaMovesOffscreenWindowIntoVisibleWorkArea),
             ("ClampToVisibleArea keeps a window inside the nearest work area", ClampToVisibleAreaKeepsWindowInsideNearestWorkArea),
-            ("Default markets include Nasdaq 100 futures", DefaultMarketsIncludeNasdaq100Futures),
+            ("MoveProportionallyToVisibleArea preserves relative work area position", MoveProportionallyToVisibleAreaPreservesRelativeWorkAreaPosition),
+            ("Default markets include configured quote symbols", DefaultMarketsIncludeConfiguredQuoteSymbols),
+            ("Default IM0 uses the CFFEX latest price field", DefaultIm0UsesCffexLatestPriceField),
             ("Loading saved user config appends missing default markets", LoadingSavedUserConfigAppendsMissingDefaultMarkets),
-            ("Main window keeps transparent chrome", MainWindowKeepsTransparentChrome)
+            ("Loading saved IM0 config applies the default price field", LoadingSavedIm0ConfigAppliesDefaultPriceField),
+            ("Loading saved IM0 config preserves an explicit price field", LoadingSavedIm0ConfigPreservesExplicitPriceField),
+            ("Main window keeps transparent chrome", MainWindowKeepsTransparentChrome),
+            ("Loaded transparent window does not enable capture exclusion", LoadedTransparentWindowDoesNotEnableCaptureExclusion),
+            ("Display settings handler uses proportional placement", DisplaySettingsHandlerUsesProportionalPlacement),
+            ("Topmost timer does not poll window placement", TopmostTimerDoesNotPollWindowPlacement)
         };
 
         var failures = 0;
@@ -106,16 +113,55 @@ internal static class Program
         Assert(placement.Top == 0, $"expected top 0, got {placement.Top}");
     }
 
-    private static void DefaultMarketsIncludeNasdaq100Futures()
+    private static void MoveProportionallyToVisibleAreaPreservesRelativeWorkAreaPosition()
+    {
+        var previousArea = new WindowWorkArea(0, 0, 1920, 1040);
+        var currentAreas = new[]
+        {
+            new WindowWorkArea(0, 0, 1280, 984)
+        };
+
+        var placement = WindowPlacementService.MoveProportionallyToVisibleArea(
+            left: 960,
+            top: 520,
+            width: 120,
+            height: 40,
+            previousArea,
+            currentAreas);
+
+        AssertApproximately(618.6666666667, placement.Left, "expected left to keep the same relative X position");
+        AssertApproximately(490.88, placement.Top, "expected top to keep the same relative Y position");
+    }
+
+    private static void DefaultMarketsIncludeConfiguredQuoteSymbols()
+    {
+        AssertDefaultMarket("hf_NQ", "纳斯达克100期货", "NQ", QuoteParser.Global);
+        AssertDefaultMarket("nf_BR2609", "合成橡胶2609", "BR2609", QuoteParser.Futures);
+    }
+
+    private static void DefaultIm0UsesCffexLatestPriceField()
+    {
+        var market = AppConfig.Default.Markets.Single(m =>
+            string.Equals(m.Symbol, "nf_IM0", StringComparison.OrdinalIgnoreCase));
+
+        Assert(market.PriceFieldIndex == 3,
+            $"expected IM0 price field 3, got {market.PriceFieldIndex?.ToString() ?? "null"}");
+    }
+
+    private static void AssertDefaultMarket(string symbol, string name, string displayCode, QuoteParser parser)
     {
         var market = AppConfig.Default.Markets.SingleOrDefault(m =>
-            string.Equals(m.Symbol, "hf_NQ", StringComparison.OrdinalIgnoreCase));
+            string.Equals(m.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
 
-        Assert(market is not null, "expected default markets to include hf_NQ");
-        Assert(market.Name == "纳斯达克100期货", $"expected NQ market name, got {market.Name}");
-        Assert(market.DisplayCode == "NQ", $"expected NQ display code, got {market.DisplayCode}");
+        if (market is null)
+        {
+            throw new InvalidOperationException($"expected default markets to include {symbol}");
+        }
+
+        Assert(market.Name == name, $"expected {displayCode} market name, got {market.Name}");
+        Assert(market.DisplayCode == displayCode, $"expected {displayCode} display code, got {market.DisplayCode}");
         Assert(market.Source == QuoteSource.Sina, $"expected Sina source, got {market.Source}");
-        Assert(market.Parser == QuoteParser.Global, $"expected global parser, got {market.Parser}");
+        Assert(market.Parser == parser, $"expected {parser} parser, got {market.Parser}");
     }
 
     private static void LoadingSavedUserConfigAppendsMissingDefaultMarkets()
@@ -158,10 +204,102 @@ internal static class Program
 
             Assert(config.Markets.Any(m => string.Equals(m.Symbol, "hf_NQ", StringComparison.OrdinalIgnoreCase)),
                 "expected loaded config to append hf_NQ from default markets");
+            Assert(config.Markets.Any(m => string.Equals(m.Symbol, "nf_BR2609", StringComparison.OrdinalIgnoreCase)),
+                "expected loaded config to append nf_BR2609 from default markets");
 
             var saved = File.ReadAllText(userPath);
             Assert(saved.Contains("\"symbol\": \"hf_NQ\"", StringComparison.Ordinal),
                 "expected migrated user config to be saved with hf_NQ");
+            Assert(saved.Contains("\"symbol\": \"nf_BR2609\"", StringComparison.Ordinal),
+                "expected migrated user config to be saved with nf_BR2609");
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    private static void LoadingSavedIm0ConfigAppliesDefaultPriceField()
+    {
+        WithSavedUserConfig(
+            """
+            {
+              "currentSymbol": "nf_IM0",
+              "lockPassword": "MVQbLqJ08w==",
+              "markets": [
+                {
+                  "name": "中千主连",
+                  "displayCode": "IM0",
+                  "symbol": "nf_IM0",
+                  "source": "sina",
+                  "parser": "futures"
+                }
+              ]
+            }
+            """,
+            (config, userPath) =>
+            {
+                var market = config.Markets.Single(m =>
+                    string.Equals(m.Symbol, "nf_IM0", StringComparison.OrdinalIgnoreCase));
+
+                Assert(market.PriceFieldIndex == 3,
+                    $"expected saved IM0 price field to migrate to 3, got {market.PriceFieldIndex?.ToString() ?? "null"}");
+
+                var saved = File.ReadAllText(userPath);
+                Assert(saved.Contains("\"priceFieldIndex\": 3", StringComparison.Ordinal),
+                    "expected migrated IM0 price field to be persisted");
+            });
+    }
+
+    private static void LoadingSavedIm0ConfigPreservesExplicitPriceField()
+    {
+        WithSavedUserConfig(
+            """
+            {
+              "currentSymbol": "nf_IM0",
+              "lockPassword": "MVQbLqJ08w==",
+              "markets": [
+                {
+                  "name": "中千主连",
+                  "displayCode": "IM0",
+                  "symbol": "nf_IM0",
+                  "source": "sina",
+                  "parser": "futures",
+                  "priceFieldIndex": 9
+                }
+              ]
+            }
+            """,
+            (config, userPath) =>
+            {
+                var market = config.Markets.Single(m =>
+                    string.Equals(m.Symbol, "nf_IM0", StringComparison.OrdinalIgnoreCase));
+
+                Assert(market.PriceFieldIndex == 9,
+                    $"expected explicit IM0 price field 9, got {market.PriceFieldIndex?.ToString() ?? "null"}");
+
+                var saved = File.ReadAllText(userPath);
+                Assert(saved.Contains("\"priceFieldIndex\": 9", StringComparison.Ordinal),
+                    "expected explicit IM0 price field to remain persisted");
+            });
+    }
+
+    private static void WithSavedUserConfig(string json, Action<AppConfig, string> assertions)
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "WinDesk.Tests", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var defaultPath = Path.Combine(tempRoot, "default.json");
+            var userPath = Path.Combine(tempRoot, "WinDesk", "appsettings.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(userPath)!);
+            File.WriteAllText(userPath, json);
+
+            var store = new SettingsStore(defaultPath, userPath);
+            assertions(store.Load(), userPath);
         }
         finally
         {
@@ -184,6 +322,33 @@ internal static class Program
             "expected no near-transparent black background because it renders as a black rectangle");
     }
 
+    private static void LoadedTransparentWindowDoesNotEnableCaptureExclusion()
+    {
+        var source = File.ReadAllText(FindRepoFile("MainWindow.xaml.cs"));
+        var method = ExtractMethod(source, "Window_Loaded");
+
+        Assert(!method.Contains("ApplyExcludeFromCapture", StringComparison.Ordinal),
+            "expected transparent window loading to avoid capture exclusion because Windows renders it as a black block");
+    }
+
+    private static void DisplaySettingsHandlerUsesProportionalPlacement()
+    {
+        var source = File.ReadAllText(FindRepoFile("MainWindow.xaml.cs"));
+        var method = ExtractMethod(source, "SystemEvents_DisplaySettingsChanged");
+
+        Assert(method.Contains("MoveWindowProportionallyToScreen", StringComparison.Ordinal),
+            "expected display settings changes to remap the window proportionally");
+    }
+
+    private static void TopmostTimerDoesNotPollWindowPlacement()
+    {
+        var source = File.ReadAllText(FindRepoFile("MainWindow.xaml.cs"));
+        var method = ExtractMethod(source, "TopmostTimer_Tick");
+
+        Assert(!method.Contains("EnsureWindowOnScreen", StringComparison.Ordinal),
+            "expected topmost timer not to poll or save window placement");
+    }
+
     private static string FindRepoFile(string fileName)
     {
         var directory = new DirectoryInfo(Environment.CurrentDirectory);
@@ -201,11 +366,58 @@ internal static class Program
         throw new FileNotFoundException($"Could not find {fileName} from {Environment.CurrentDirectory}.");
     }
 
+    private static string ExtractMethod(string source, string methodName)
+    {
+        var start = source.IndexOf($"private void {methodName}", StringComparison.Ordinal);
+        if (start < 0)
+        {
+            start = source.IndexOf($"private async void {methodName}", StringComparison.Ordinal);
+        }
+
+        if (start < 0)
+        {
+            throw new InvalidOperationException($"Could not find method {methodName}.");
+        }
+
+        var bodyStart = source.IndexOf('{', start);
+        if (bodyStart < 0)
+        {
+            throw new InvalidOperationException($"Could not find body for method {methodName}.");
+        }
+
+        var depth = 0;
+        for (var i = bodyStart; i < source.Length; i++)
+        {
+            if (source[i] == '{')
+            {
+                depth++;
+            }
+            else if (source[i] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return source[bodyStart..(i + 1)];
+                }
+            }
+        }
+
+        throw new InvalidOperationException($"Could not extract body for method {methodName}.");
+    }
+
     private static void Assert(bool condition, string message)
     {
         if (!condition)
         {
             throw new InvalidOperationException(message);
+        }
+    }
+
+    private static void AssertApproximately(double expected, double actual, string message)
+    {
+        if (Math.Abs(expected - actual) > 0.001)
+        {
+            throw new InvalidOperationException($"{message}: expected {expected}, got {actual}");
         }
     }
 }

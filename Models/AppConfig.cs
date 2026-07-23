@@ -100,6 +100,7 @@ public sealed class AppConfig
                 Referer = "https://vip.stock.finance.sina.com.cn/",
                 Source = QuoteSource.Sina,
                 Parser = QuoteParser.Futures,
+                PriceFieldIndex = 3,
                 Color = "CCCCCC"
             }
         ]

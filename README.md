@@ -25,6 +25,14 @@ dotnet run --project .\WinDesk.csproj
 dotnet publish .\WinDesk.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
 ```
 
+Keep the published artifact unique. After publishing, keep only:
+
+```text
+bin\Release\net8.0-windows\win-x64\publish\WinDesk.exe
+```
+
+Do not leave extra Debug, intermediate Release, satellite-resource, or `obj` outputs around. If extra build output is created, clean it so the `bin` tree contains only the published `WinDesk.exe`.
+
 Use `--self-contained true` if the target machine does not have the .NET 8 Desktop Runtime installed.
 
 ## Configure symbols
@@ -36,6 +44,8 @@ Sina parser defaults:
 - `index`: price field `1`, e.g. `s_sh000852`
 - `futures`: price field `6`, e.g. `nf_AO0`, `nf_M0`
 - `global`: price field `0`, e.g. `hf_GC`, `hf_CL`
+
+Sina uses a different field layout for CFFEX futures. The `nf_IM0` market sets `priceFieldIndex` to `3` to read its latest traded price.
 
 For a custom Sina field, set `priceFieldIndex` on a market entry.
 

@@ -52,7 +52,7 @@ public sealed class SettingsStore
             config.Markets = AppConfig.Default.Markets;
             changed = true;
         }
-        else if (AppendMissingDefaultMarkets(config))
+        else if (MergeDefaultMarkets(config))
         {
             changed = true;
         }
@@ -71,18 +71,31 @@ public sealed class SettingsStore
         return config;
     }
 
-    private static bool AppendMissingDefaultMarkets(AppConfig config)
+    private static bool MergeDefaultMarkets(AppConfig config)
     {
-        var existingSymbols = new HashSet<string>(
-            config.Markets.Select(market => market.Symbol),
-            StringComparer.OrdinalIgnoreCase);
+        var existingBySymbol = new Dictionary<string, MarketDefinition>(StringComparer.OrdinalIgnoreCase);
+        foreach (var market in config.Markets)
+        {
+            if (!string.IsNullOrWhiteSpace(market.Symbol))
+            {
+                existingBySymbol.TryAdd(market.Symbol, market);
+            }
+        }
+
         var changed = false;
 
-        foreach (var market in AppConfig.Default.Markets)
+        foreach (var defaultMarket in AppConfig.Default.Markets)
         {
-            if (existingSymbols.Add(market.Symbol))
+            if (!existingBySymbol.TryGetValue(defaultMarket.Symbol, out var existingMarket))
             {
-                config.Markets.Add(market);
+                config.Markets.Add(defaultMarket);
+                existingBySymbol.Add(defaultMarket.Symbol, defaultMarket);
+                changed = true;
+            }
+            else if (existingMarket.PriceFieldIndex is null &&
+                     defaultMarket.PriceFieldIndex is int defaultPriceFieldIndex)
+            {
+                existingMarket.PriceFieldIndex = defaultPriceFieldIndex;
                 changed = true;
             }
         }

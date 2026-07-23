@@ -14,14 +14,24 @@ public sealed class WindowPlacementService
 {
     public WindowPlacement ClampToVisibleArea(double left, double top, double width, double height)
     {
-        var workAreas = Forms.Screen.AllScreens.Select(screen =>
-            new WindowWorkArea(
-                screen.WorkingArea.Left,
-                screen.WorkingArea.Top,
-                screen.WorkingArea.Width,
-                screen.WorkingArea.Height));
+        var workAreas = GetCurrentWorkAreas();
 
         return ClampToVisibleArea(left, top, width, height, workAreas);
+    }
+
+    public WindowPlacement MoveProportionallyToVisibleArea(
+        double left,
+        double top,
+        double width,
+        double height,
+        WindowWorkArea previousArea)
+    {
+        return MoveProportionallyToVisibleArea(left, top, width, height, previousArea, GetCurrentWorkAreas());
+    }
+
+    public WindowWorkArea? FindBestWorkArea(double left, double top, double width, double height)
+    {
+        return FindBestWorkArea(left, top, width, height, GetCurrentWorkAreas());
     }
 
     public static WindowPlacement ClampToVisibleArea(
@@ -50,6 +60,66 @@ public sealed class WindowPlacementService
         return new WindowPlacement(clampedLeft, clampedTop);
     }
 
+    public static WindowPlacement MoveProportionallyToVisibleArea(
+        double left,
+        double top,
+        double width,
+        double height,
+        WindowWorkArea previousArea,
+        IEnumerable<WindowWorkArea> currentWorkAreas)
+    {
+        var areas = currentWorkAreas.Where(area => area.Width > 0 && area.Height > 0).ToArray();
+        if (areas.Length == 0)
+        {
+            return new WindowPlacement(left, top);
+        }
+
+        if (previousArea.Width <= 0 || previousArea.Height <= 0)
+        {
+            return ClampToVisibleArea(left, top, width, height, areas);
+        }
+
+        var target = areas
+            .OrderBy(area => DistanceSquaredBetweenCenters(previousArea, area))
+            .First();
+
+        var ratioX = Ratio(left - previousArea.Left, previousArea.Width - width);
+        var ratioY = Ratio(top - previousArea.Top, previousArea.Height - height);
+        var mappedLeft = target.Left + ratioX * Math.Max(0, target.Width - width);
+        var mappedTop = target.Top + ratioY * Math.Max(0, target.Height - height);
+
+        return ClampToVisibleArea(mappedLeft, mappedTop, width, height, areas);
+    }
+
+    public static WindowWorkArea? FindBestWorkArea(
+        double left,
+        double top,
+        double width,
+        double height,
+        IEnumerable<WindowWorkArea> workAreas)
+    {
+        var areas = workAreas.Where(area => area.Width > 0 && area.Height > 0).ToArray();
+        if (areas.Length == 0)
+        {
+            return null;
+        }
+
+        return areas
+            .OrderByDescending(area => IntersectionArea(left, top, width, height, area))
+            .ThenBy(area => DistanceSquaredToCenter(left, top, width, height, area))
+            .First();
+    }
+
+    private static IEnumerable<WindowWorkArea> GetCurrentWorkAreas()
+    {
+        return Forms.Screen.AllScreens.Select(screen =>
+            new WindowWorkArea(
+                screen.WorkingArea.Left,
+                screen.WorkingArea.Top,
+                screen.WorkingArea.Width,
+                screen.WorkingArea.Height));
+    }
+
     private static double IntersectionArea(double left, double top, double width, double height, WindowWorkArea area)
     {
         var right = left + width;
@@ -70,6 +140,28 @@ public sealed class WindowPlacementService
         var dy = windowCenterY - areaCenterY;
 
         return dx * dx + dy * dy;
+    }
+
+    private static double DistanceSquaredBetweenCenters(WindowWorkArea a, WindowWorkArea b)
+    {
+        var ax = a.Left + a.Width / 2;
+        var ay = a.Top + a.Height / 2;
+        var bx = b.Left + b.Width / 2;
+        var by = b.Top + b.Height / 2;
+        var dx = ax - bx;
+        var dy = ay - by;
+
+        return dx * dx + dy * dy;
+    }
+
+    private static double Ratio(double offset, double range)
+    {
+        if (range <= 0)
+        {
+            return 0;
+        }
+
+        return Clamp(offset / range, 0, 1);
     }
 
     private static double Clamp(double value, double min, double max)
